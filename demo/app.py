@@ -287,6 +287,9 @@ def parse_paragraph_props(node: ET.Element | None) -> dict[str, Any]:
     if jc:
         props["align"] = jc
 
+    if node.find("./w:tabs", NS) is not None:
+        props["hasExplicitTabs"] = True
+
     spacing = node.find("./w:spacing", NS)
     if spacing is not None:
         before = twips_to_pt(attr(spacing, "before"))
@@ -313,6 +316,7 @@ def parse_paragraph_props(node: ET.Element | None) -> dict[str, Any]:
             props["textIndentPt"] = first_line
         if hanging is not None:
             props["textIndentPt"] = -hanging
+            props["hangingIndentPt"] = hanging
 
     shading = node.find("./w:shd", NS)
     fill = resolve_fill(shading)
@@ -647,7 +651,7 @@ def render_paragraph(paragraph: dict[str, Any]) -> str:
     attrs = [value for value in attrs if value]
 
     tabbed = split_inline_nodes_on_first_tab(paragraph["children"])
-    if tabbed is not None:
+    if tabbed is not None and is_label_value_paragraph(tabbed, paragraph):
         left_html = "".join(render_inline(node) for node in tabbed["left"])
         right_html = "".join(render_inline(node) for node in tabbed["right"])
         classes = [paragraph_class_name(paragraph.get("style_id"), paragraph.get("style_name")), "tabbed-paragraph"]
@@ -753,7 +757,7 @@ def paragraph_css(props: dict[str, Any]) -> dict[str, str]:
         css["margin-left"] = pt(props["marginLeftPt"])
     if props.get("marginRightPt") is not None:
         css["margin-right"] = pt(props["marginRightPt"])
-    if props.get("textIndentPt") is not None:
+    if props.get("textIndentPt") is not None and not should_skip_text_indent(props):
         css["text-indent"] = pt(props["textIndentPt"])
     if props.get("lineHeightPt") is not None:
         css["line-height"] = pt(props["lineHeightPt"])
@@ -770,6 +774,21 @@ def paragraph_css(props: dict[str, Any]) -> dict[str, str]:
     if props.get("borderCss"):
         css["__raw__"] = props["borderCss"]
     return css
+
+
+def should_skip_text_indent(props: dict[str, Any]) -> bool:
+    hanging = props.get("hangingIndentPt")
+    left = props.get("marginLeftPt")
+
+    if hanging is None:
+        return False
+    if left is None:
+        return False
+
+    # Word headings often use left indent + hanging indent to keep numbering
+    # aligned. Applying the negative text-indent literally in HTML can push the
+    # prefix outside the visible box.
+    return hanging >= left
 
 
 def run_css(props: dict[str, Any]) -> dict[str, str]:
@@ -916,6 +935,32 @@ def split_inline_nodes_on_first_tab(nodes: list[dict[str, Any]]) -> dict[str, li
         return None
 
     return {"left": left, "right": right}
+
+
+def is_label_value_paragraph(tabbed: dict[str, list[dict[str, Any]]], paragraph: dict[str, Any]) -> bool:
+    left_text = inline_plain_text(tabbed["left"]).strip()
+    style_id = (paragraph.get("style_id") or "").lower()
+    style_name = (paragraph.get("style_name") or "").lower()
+    props = paragraph.get("props", {})
+
+    if props.get("hasExplicitTabs"):
+        return True
+    if left_text.endswith(":"):
+        return True
+    if "coverpage" in style_id or "cover page" in style_name:
+        return True
+
+    return False
+
+
+def inline_plain_text(nodes: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for node in nodes:
+        if node["type"] == "text":
+            parts.append(node["value"])
+        elif node["type"] == "revision":
+            parts.append(inline_plain_text(node["children"]))
+    return "".join(parts)
 
 
 def resolve_fill(node: ET.Element | None) -> str | None:
