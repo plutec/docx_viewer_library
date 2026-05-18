@@ -319,6 +319,26 @@ def parse_paragraph_props(node: ET.Element | None) -> dict[str, Any]:
     if fill:
         props["backgroundColor"] = fill
 
+    borders = node.find("./w:pBdr", NS)
+    if borders is not None:
+        border_css = []
+        for edge in ["top", "right", "bottom", "left"]:
+            edge_node = borders.find(f"./w:{edge}", NS)
+            if edge_node is None:
+                continue
+            val = attr(edge_node, "val")
+            if val in {None, "nil", "none"}:
+                continue
+            color = normalize_color(attr(edge_node, "color") or "000000")
+            size = attr(edge_node, "sz")
+            space = attr(edge_node, "space")
+            px = max(1, round((int(size) / 8) if size and size.isdigit() else 1))
+            border_css.append(f"border-{edge}: {px}px solid {color}")
+            if space and space.isdigit():
+                props[f"border{edge.capitalize()}SpacePt"] = round(int(space) * 0.75, 2)
+        if border_css:
+            props["borderCss"] = "; ".join(border_css)
+
     return props
 
 
@@ -718,6 +738,16 @@ def paragraph_css(props: dict[str, Any]) -> dict[str, str]:
         css["line-height"] = pt(props["lineHeightPt"])
     if props.get("backgroundColor"):
         css["background-color"] = props["backgroundColor"]
+    if props.get("borderTopSpacePt") is not None:
+        css["padding-top"] = pt(props["borderTopSpacePt"])
+    if props.get("borderBottomSpacePt") is not None:
+        css["padding-bottom"] = pt(props["borderBottomSpacePt"])
+    if props.get("borderLeftSpacePt") is not None:
+        css["padding-left"] = pt(props["borderLeftSpacePt"])
+    if props.get("borderRightSpacePt") is not None:
+        css["padding-right"] = pt(props["borderRightSpacePt"])
+    if props.get("borderCss"):
+        css["__raw__"] = props["borderCss"]
     return css
 
 
