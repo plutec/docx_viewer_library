@@ -203,6 +203,21 @@
       margin-bottom: 16px;
     }
 
+    .docx-viewer .tabbed-paragraph {
+      display: grid;
+      grid-template-columns: minmax(140px, 260px) minmax(0, 1fr);
+      column-gap: 18px;
+      align-items: start;
+    }
+
+    .docx-viewer .tabbed-left {
+      min-width: 0;
+    }
+
+    .docx-viewer .tabbed-right {
+      min-width: 0;
+    }
+
     .docx-viewer h1,
     .docx-viewer h2,
     .docx-viewer h3,
@@ -371,6 +386,11 @@
 
       .viewer-shell {
         padding-right: 42px;
+      }
+
+      .docx-viewer .tabbed-paragraph {
+        grid-template-columns: 1fr;
+        row-gap: 4px;
       }
     }
   </style>

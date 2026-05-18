@@ -635,7 +635,6 @@ def render_table_cell(cell: dict[str, Any], table_props: dict[str, Any]) -> str:
 
 
 def render_paragraph(paragraph: dict[str, Any]) -> str:
-    children = "".join(render_inline(node) for node in paragraph["children"])
     tag_name = paragraph_tag_name(paragraph.get("style_id"), paragraph.get("style_name"))
     attrs = [
         class_attr(paragraph_class_name(paragraph.get("style_id"), paragraph.get("style_name"))),
@@ -646,6 +645,28 @@ def render_paragraph(paragraph: dict[str, Any]) -> str:
     if style:
         attrs.append(f'style="{style}"')
     attrs = [value for value in attrs if value]
+
+    tabbed = split_inline_nodes_on_first_tab(paragraph["children"])
+    if tabbed is not None:
+        left_html = "".join(render_inline(node) for node in tabbed["left"])
+        right_html = "".join(render_inline(node) for node in tabbed["right"])
+        classes = [paragraph_class_name(paragraph.get("style_id"), paragraph.get("style_name")), "tabbed-paragraph"]
+        open_attrs = [
+            class_attr(" ".join(classes)),
+            data_attr("data-paragraph-style-id", paragraph.get("style_id")),
+            data_attr("data-paragraph-style-name", paragraph.get("style_name")),
+        ]
+        if style:
+            open_attrs.append(f'style="{style}"')
+        open_attrs = [value for value in open_attrs if value]
+        return (
+            f"<{tag_name} {' '.join(open_attrs)}>"
+            f'<span class="tabbed-left">{left_html}</span>'
+            f'<span class="tabbed-right">{right_html}</span>'
+            f"</{tag_name}>"
+        )
+
+    children = "".join(render_inline(node) for node in paragraph["children"])
     return f"<{tag_name} {' '.join(attrs)}>{children}</{tag_name}>"
 
 
@@ -863,6 +884,38 @@ def merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         if value is not None:
             merged[key] = value
     return merged
+
+
+def split_inline_nodes_on_first_tab(nodes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]] | None:
+    left: list[dict[str, Any]] = []
+    right: list[dict[str, Any]] = []
+    found_tab = False
+
+    for node in nodes:
+        if node["type"] != "text":
+            if found_tab:
+                right.append(node)
+            else:
+                left.append(node)
+            continue
+
+        value = node["value"]
+        if "\t" not in value:
+            target = right if found_tab else left
+            target.append(node)
+            continue
+
+        before, after = value.split("\t", 1)
+        if before:
+            left.append({**node, "value": before})
+        if after:
+            right.append({**node, "value": after})
+        found_tab = True
+
+    if not found_tab:
+        return None
+
+    return {"left": left, "right": right}
 
 
 def resolve_fill(node: ET.Element | None) -> str | None:
