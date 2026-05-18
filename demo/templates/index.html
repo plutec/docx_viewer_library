@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOCX Viewer Demo</title>
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #f6efe8 0%, #e5eef7 100%);
+      --panel: rgba(255, 255, 255, 0.86);
+      --border: rgba(15, 23, 42, 0.12);
+      --text: #172033;
+      --muted: #526077;
+      --accent: #0f766e;
+      --insert-line: #0f9f6e;
+      --insert-soft: rgba(15, 159, 110, 0.18);
+      --delete-line: #c2410c;
+      --delete-soft: rgba(194, 65, 12, 0.14);
+      --tooltip-bg: #18212f;
+      --tooltip-fg: #f8fafc;
+      --shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 32px));
+      margin: 32px auto;
+      display: grid;
+      gap: 24px;
+    }
+
+    .panel {
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+    }
+
+    .upload-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .upload-form input[type="file"] {
+      max-width: 100%;
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .upload-form button {
+      border: 0;
+      border-radius: 999px;
+      background: var(--accent);
+      color: white;
+      padding: 12px 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .chip {
+      background: rgba(15, 118, 110, 0.1);
+      color: #0f5250;
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 0.92rem;
+    }
+
+    .error {
+      border-left: 4px solid #b91c1c;
+      background: rgba(254, 226, 226, 0.9);
+      color: #7f1d1d;
+      padding: 14px 16px;
+      border-radius: 12px;
+    }
+
+    .viewer-shell {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: #fffefc;
+      padding: 26px 52px 26px 26px;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    .viewer-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .view-toggle {
+      display: inline-flex;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .view-toggle button {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: transparent;
+      color: var(--muted);
+      font: 600 0.92rem/1 "Segoe UI", sans-serif;
+      cursor: pointer;
+    }
+
+    .view-toggle button.active {
+      background: #172033;
+      color: white;
+    }
+
+    .view-hint {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .docx-viewer {
+      font-family: Georgia, "Times New Roman", serif;
+      color: #1f2937;
+      line-height: 1.7;
+      min-height: 40px;
+    }
+
+    .docx-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+      table-layout: fixed;
+      margin: 0 0 18px;
+      font-size: 0.98rem;
+      empty-cells: show;
+    }
+
+    .docx-table .docx-cell {
+      border-right: var(--docx-inside-vertical, none);
+      border-bottom: var(--docx-inside-horizontal, none);
+    }
+
+    .docx-table tr > .docx-cell:last-child {
+      border-right: none;
+    }
+
+    .docx-table tbody tr:last-child > .docx-cell {
+      border-bottom: none;
+    }
+
+    .docx-cell {
+      vertical-align: top;
+      padding: 6px 8px;
+      overflow-wrap: break-word;
+    }
+
+    .docx-cell > :first-child {
+      margin-top: 0;
+    }
+
+    .docx-cell > :last-child {
+      margin-bottom: 0;
+    }
+
+    .docx-viewer p {
+      color: #1f2937;
+      margin-bottom: 16px;
+    }
+
+    .docx-viewer h1,
+    .docx-viewer h2,
+    .docx-viewer h3,
+    .docx-viewer h4,
+    .docx-viewer h5,
+    .docx-viewer h6 {
+      color: #142033;
+      margin: 1.1em 0 0.45em;
+      line-height: 1.25;
+      font-family: Cambria, Georgia, "Times New Roman", serif;
+      font-weight: 700;
+    }
+
+    .docx-viewer h1 {
+      font-size: 2.1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .docx-viewer h2 {
+      font-size: 1.55rem;
+      color: #304866;
+    }
+
+    .docx-viewer h3 {
+      font-size: 1.25rem;
+    }
+
+    .docx-viewer [data-paragraph-style-name="Subtitle"] {
+      font-style: italic;
+      font-weight: 500;
+      color: #53657d;
+      margin-top: -0.1em;
+    }
+
+    .docx-viewer .revision {
+      position: relative;
+      cursor: default;
+      transition: box-shadow 120ms ease, color 120ms ease;
+    }
+
+    .docx-viewer ins.revision {
+      color: inherit;
+      text-decoration: none;
+      border-bottom: 2px solid var(--insert-line);
+      box-shadow: inset 0 -0.28em 0 0 var(--insert-soft);
+    }
+
+    .docx-viewer del.revision {
+      color: inherit;
+      text-decoration-line: line-through;
+      text-decoration-color: var(--delete-line);
+      text-decoration-thickness: 2px;
+      box-shadow: inset 0 -0.22em 0 0 var(--delete-soft);
+    }
+
+    .docx-viewer .revision:hover,
+    .docx-viewer .revision:focus-visible {
+      box-shadow: inset 0 -0.4em 0 0 color-mix(in srgb, currentColor 16%, transparent);
+      outline: none;
+    }
+
+    .docx-viewer .revision[data-revision-author]::after {
+      content: "";
+      display: inline-block;
+      width: 0.42em;
+      height: 0.42em;
+      margin-left: 0.16em;
+      border-radius: 999px;
+      vertical-align: middle;
+      background: currentColor;
+      opacity: 0.72;
+    }
+
+    .docx-viewer .revision[data-revision-label]::before {
+      content: attr(data-revision-label);
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 10px);
+      transform: translateY(6px);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 20;
+      min-width: max-content;
+      max-width: min(360px, 80vw);
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: var(--tooltip-bg);
+      color: var(--tooltip-fg);
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24);
+      font: 600 0.78rem/1.35 "Segoe UI", sans-serif;
+      white-space: normal;
+    }
+
+    .docx-viewer .revision:hover::before,
+    .docx-viewer .revision:focus-visible::before {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .viewer-shell.mode-applied ins.revision {
+      border-bottom: 0;
+      box-shadow: none;
+    }
+
+    .viewer-shell.mode-applied del.revision {
+      display: none;
+    }
+
+    .viewer-shell.mode-applied .revision::after,
+    .viewer-shell.mode-applied .revision::before {
+      display: none;
+    }
+
+    .revision-gutter {
+      position: absolute;
+      top: 18px;
+      right: 10px;
+      bottom: 18px;
+      width: 24px;
+      border-left: 1px solid rgba(15, 23, 42, 0.12);
+      pointer-events: none;
+    }
+
+    .revision-marker {
+      position: absolute;
+      right: 3px;
+      width: 14px;
+      height: 6px;
+      border: 0;
+      border-radius: 999px;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+    }
+
+    .revision-marker.marker-insertion,
+    .revision-marker.marker-moveTo {
+      background: var(--insert-line);
+    }
+
+    .revision-marker.marker-deletion,
+    .revision-marker.marker-moveFrom {
+      background: var(--delete-line);
+    }
+
+    .revision-marker:hover,
+    .revision-marker:focus-visible {
+      transform: scaleX(1.15);
+      outline: none;
+    }
+
+    @media (max-width: 720px) {
+      .panel {
+        padding: 20px;
+        border-radius: 18px;
+      }
+
+      .upload-form {
+        align-items: stretch;
+      }
+
+      .upload-form button,
+      .upload-form input[type="file"] {
+        width: 100%;
+      }
+
+      .viewer-shell {
+        padding-right: 42px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="panel">
+      <h1>DOCX Viewer Demo</h1>
+      <p>Upload a <code>.docx</code> file and the server will process and render its content, including insertions, deletions, and revision authors when they are present in the document.</p>
+      <form class="upload-form" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required />
+        <button type="submit">Process DOCX</button>
+      </form>
+
+      {% if document_info %}
+      <div class="meta">
+        <span class="chip">File: {{ document_info.filename }}</span>
+        <span class="chip">Blocks: {{ document_info.block_count }}</span>
+        <span class="chip">Paragraphs: {{ document_info.paragraph_count }}</span>
+        <span class="chip">Tables: {{ document_info.table_count }}</span>
+        <span class="chip">Revisions: {{ document_info.revision_count }}</span>
+        <span class="chip">Processed: {{ document_info.processed_at }}</span>
+      </div>
+      {% endif %}
+    </section>
+
+    {% if error %}
+    <section class="panel">
+      <div class="error">{{ error }}</div>
+    </section>
+    {% endif %}
+
+    {% if html_output %}
+    <section class="panel">
+      <h2>Rendered View</h2>
+      <p>Switch between tracked markup and applied changes. The right gutter also marks where revisions appear in the document.</p>
+      <div class="viewer-toolbar">
+        <div class="view-toggle" role="tablist" aria-label="Revision view mode">
+          <button type="button" class="active" data-view-mode="markup">Tracked Changes</button>
+          <button type="button" data-view-mode="applied">Applied Changes</button>
+        </div>
+        <span class="view-hint">Hover a revision for details, or click a marker in the right gutter to jump to that change.</span>
+      </div>
+      <div class="viewer-shell mode-markup" data-viewer-shell>
+        {{ html_output | safe }}
+        <div class="revision-gutter" aria-hidden="true" data-revision-gutter></div>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+  <script>
+    (() => {
+      const shell = document.querySelector("[data-viewer-shell]");
+      const gutter = document.querySelector("[data-revision-gutter]");
+      const buttons = Array.from(document.querySelectorAll("[data-view-mode]"));
+
+      if (!shell || !gutter || buttons.length === 0) {
+        return;
+      }
+
+      const setMode = (mode) => {
+        shell.classList.toggle("mode-markup", mode === "markup");
+        shell.classList.toggle("mode-applied", mode === "applied");
+        for (const button of buttons) {
+          button.classList.toggle("active", button.dataset.viewMode === mode);
+          button.setAttribute("aria-pressed", String(button.dataset.viewMode === mode));
+        }
+      };
+
+      const renderMarkers = () => {
+        gutter.replaceChildren();
+        const revisions = Array.from(shell.querySelectorAll(".revision[data-revision-kind]"));
+        if (revisions.length === 0) {
+          return;
+        }
+
+        const shellRect = shell.getBoundingClientRect();
+        const placed = [];
+
+        revisions.forEach((revision, index) => {
+          if (shell.classList.contains("mode-applied") && revision.matches("del.revision")) {
+            return;
+          }
+
+          const rect = revision.getBoundingClientRect();
+          let top = rect.top - shellRect.top + shell.scrollTop;
+          top = Math.max(0, Math.min(top, shell.scrollHeight - 8));
+
+          for (const prev of placed) {
+            if (Math.abs(prev - top) < 8) {
+              top = prev + 8;
+            }
+          }
+          placed.push(top);
+
+          const marker = document.createElement("button");
+          const kind = revision.dataset.revisionKind || "formatChange";
+          const author = revision.dataset.revisionAuthor || "Unknown author";
+          const label = revision.dataset.revisionLabel || kind;
+          marker.type = "button";
+          marker.className = `revision-marker marker-${kind}`;
+          marker.style.top = `${top}px`;
+          marker.title = label;
+          marker.setAttribute("aria-label", `${label} at marker ${index + 1}`);
+          marker.addEventListener("click", () => {
+            revision.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+          });
+          gutter.appendChild(marker);
+        });
+      };
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          setMode(button.dataset.viewMode || "markup");
+          requestAnimationFrame(renderMarkers);
+        });
+      });
+
+      const observer = new ResizeObserver(() => renderMarkers());
+      observer.observe(shell);
+      window.addEventListener("resize", renderMarkers);
+      shell.addEventListener("scroll", renderMarkers);
+
+      setMode("markup");
+      requestAnimationFrame(renderMarkers);
+    })();
+  </script>
+</body>
+</html>

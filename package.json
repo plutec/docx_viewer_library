@@ -1,0 +1,36 @@
+{
+  "name": "docx-viewer-library",
+  "version": "0.1.0",
+  "description": "TypeScript library to parse DOCX files and render tracked changes with author metadata.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "docx",
+    "wordprocessingml",
+    "tracked-changes",
+    "openxml"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "fast-xml-parser": "^4.5.3",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
